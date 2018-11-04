@@ -38,25 +38,17 @@ def read_jpeg(filename):
     read_file = tf.read_file(filename)
     decoded_image = tf.image.decode_jpeg(read_file, channels=FLAGS.channel)
     resized_image = tf.image.resize_images(decoded_image, [FLAGS.img_h,FLAGS.img_w])
-    resized_image = tf.cast(resized_image, tf.uint8)
-    
+    resized_image = tf.cast(resized_image, tf.uint8)    
     return resized_image
-
-
-
-        
-
 
 
 def convert_images(sess, data_set):
     filename_set = get_filename(data_set)
-    
     with open('./data/'  + data_set + '_data.bin', 'wb') as f:
         for i in range(0, len(filename_set)):
-            resized_image = read_jpeg(filename_set[i][1])
-
+            read_image = read_jpeg(filename_set[i][1])
             try:
-                image = sess.run(resized_image)
+                image = sess.run(read_image)
             except Exception as e:
                 print(e.message) 
                 continue
@@ -103,12 +95,13 @@ def read_raw_images(data_set):
     reader = tf.FixedLengthRecordReader(record_bytes=record_bytes)
     key, value = reader.read(filename_queue)
     record_bytes = tf.decode_raw(value, tf.uint8)
-    
+
     label = tf.cast(tf.slice(record_bytes, [0],[1]), tf.int32)
     image = tf.reshape(tf.slice(record_bytes,[1],[size]),
                        [FLAGS.channel,FLAGS.img_h,FLAGS.img_w])
     image_ = tf.transpose(image, [1,2,0])
-    
+
+
     return image_, label
 
 def generate_image_and_label_batch(image, label, min_queue_examples, batch_size, shuffle):
@@ -131,9 +124,8 @@ def generate_image_and_label_batch(image, label, min_queue_examples, batch_size,
 
 def main(argv = None):
     with tf.Session() as sess:
-        convert_images(sess, 'train')
-        convert_images(sess, 'eval')
-        
+        convert_images(sess, 'train')     
+        convert_images(sess, 'eval')        
 
 if __name__ == '__main__' :
     tf.app.run()

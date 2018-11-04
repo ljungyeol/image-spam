@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[2]:
+# In[1]:
 
 
 import tensorflow as tf
@@ -53,7 +53,6 @@ w1 = weight_variable([kernel_size,kernel_size,channel,img_size])
 b1 = bias_variable([img_size])
 L1 = tf.nn.relu(conv2d(images,w1)+ tf.cast(b1, tf.float32))
 L1 = max_pool(L1,pool_size,pool_size)
-#L1 = tf.nn.dropout(L1,keep_prob=keep_prob)
 
 prev_img_size = img_size
 img_size *= 2
@@ -92,75 +91,49 @@ b_fc2 = bias_variable([2])
 #hypothesis output
 y_conv = tf.matmul(L_fc1,w_fc2) +tf.cast(b_fc2, tf.float32) 
 
-#cross entropy 정의 output
+#cross entropy 정의
 cross_entropy = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits
                                (logits=y_conv, labels=labels))
 
-#train step 정의 output
+#train step 정의
 train_step = tf.train.AdamOptimizer(0.001).minimize(cross_entropy)
 
 #tensorboard 기록하기 위한 선언
-#cost_sum = tf.summary.scalar("cost", cross_entropy)
-
-#정확도 계산 변수 선언 y_conv와 Y의 각 행에서 가장 큰 값이 같은지 비교
-#correct_prediction = tf.equal(tf.argmax(y_conv,1),tf.argmax(Y,1))
-#accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
+cost_sum = tf.summary.scalar("cost", cross_entropy)
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 
 
-#saver 이용해서 모델 저장 model 폴더에 저장한다.
-#SAVE_DIR = "model"
-#saver = tf.train.Saver()
-#checkpoint_path = os.path.join(SAVE_DIR,"model")
-#ckpt = tf.train.get_checkpoint_state(SAVE_DIR)
+
 if tf.gfile.Exists(FLAGS.checkpoint_dir) == False:
     tf.gfile.MakeDirs(FLAGS.checkpoint_dir)
 
 if val is '1':
     with tf.Session(config=config) as sess:
-        #print("학습 시작")
-
-        #시작 시간 기록
-        #learning_start = time.time()
-        #learning_start_time = time.strftime("%X", time.localtime())
-        #init = tf.global_variables_initializer()
-       # sess.run(init)
-        #writer = tf.summary.FileWriter("./logs/cost_log")
-        #writer.add_graph(sess.graph)
-
-        #merge_sum = tf.summary.merge_all()
-
-        #coord = tf.train.Coordinator()
-        #threads = tf.train.start_queue_runners(sess=sess,coord=coord)
-
-       # for step in range(FLAGS.max_steps):
-        #        summary, _ = sess.run([merge_sum,train_step], feed_dict={keep_prob: 0.7})
-        #        writer.add_summary(summary, global_step=step)
-        #        print (step, sess.run(cross_entropy, feed_dict={keep_prob: 1.0}))
-
-       # coord.request_stop()
-        #coord.join(threads)
-
+      
         saver = tf.train.Saver()
-        
+      
         #if tf.gfile.Exists(FLAGS.checkpoint_dir + '/model.ckpt'):
         #    saver.restore(sess, FLAGS.checkpoint_dir + '/model.ckpt')
             
         #else:
-         #   init = tf.global_variables_initializer()
-         #   sess.run(init)
-            
-        saver.restore(sess, FLAGS.checkpoint_dir + '/model.ckpt')
+        init = tf.global_variables_initializer()
+        sess.run(init)
 
+        #saver.restore(sess, FLAGS.checkpoint_dir + '/model.ckpt')
+        
+        writer = tf.summary.FileWriter("./logs/cost_log")
+        writer.add_graph(sess.graph) 
+        merge_sum = tf.summary.merge_all()
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess,coord=coord)
-
+        
         for step in range(FLAGS.max_steps):
 
-            sess.run(train_step, feed_dict={keep_prob: 0.7})
-
+            #sess.run(train_step, feed_dict={keep_prob: 0.7})
+            summary, _ = sess.run([merge_sum,train_step], feed_dict={keep_prob: 0.7})
+            writer.add_summary(summary, global_step=step)
             print (step, sess.run(cross_entropy, feed_dict={keep_prob: 1.0}))
 
             if step % 100 == 0 or (step + 1) == FLAGS.max_steps:
@@ -173,37 +146,54 @@ if val is '1':
 else:
     with tf.Session(config=config) as sess:
         saver = tf.train.Saver()
-        
-        #if tf.gfile.Exists(FLAGS.checkpoint_dir + '/model.ckpt'):
-         #   saver.restore(sess, FLAGS.checkpoint_dir + '/model.ckpt')
-         #   print('Open Complete')
-        #else:
-        #    print('Cannot find save file')
-        
         saver.restore(sess, FLAGS.checkpoint_dir + '/model.ckpt')
         
         delta = datetime.timedelta()
-        max_steps = 10
+        max_steps = 14
         true_count = 0.
+        pre_total_count = 0.
+        pre_true_count = 0.
+        rec_total_count = 0.
+        rec_true_count = 0.
         total_sample_count = max_steps * FLAGS.batch_size
         
         top_k_op = tf.nn.in_top_k(y_conv, labels, 1)
+        #acc = tf.metrics.accuracy(labels=labels, predictions=y_conv)
+        #recall = tf.metrics.recall(
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess,coord=coord)
 
         for i in range(0, max_steps):
             start = datetime.datetime.now()
             predictions = sess.run(top_k_op, feed_dict={keep_prob: 1.0})
+            #원래 값이 spam인것 구하기
+            pre = sess.run(labels)
+            for j in range(0, max_steps):
+                if pre[j] == 1:
+                    rec_total_count +=1
+                    rec_true_count += predictions[j]
+                    pre_total_count += predictions[j]
+                    pre_true_count += predictions[j]
+                elif pre[j] == 0:
+                    if predictions[j] == False:
+                        pre_total_count += 1
+                    
+                    
+            #print(sess.run(acc, feed_dict = {keep_prob: 1.0}))
+            print(predictions)
             true_count += np.sum(predictions)
             delta += datetime.datetime.now() - start
         coord.request_stop()
         coord.join(threads)
     print ('total sample count: %d' % total_sample_count)
-
-    print ('precision @ 1: %f' % (true_count / total_sample_count))
-
-    print ('evaluation time: %f seconds' % ((delta.seconds + delta.microseconds / 1E6) / max_steps))
-        
-#h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-#h_pool1 = max_pool_2x2(h_conv1)    
+    #print ('total pre count: %d' %pre_total_count)
+    #print ('total rec count: %d' %rec_total_count)
+    #print ('true count: %d' % true_count)
+    #print ('true pre count: %d' % pre_true_count)
+    #print ('true rec count: %d' % rec_true_count)   
+    
+    print ('recall : %f' % (rec_true_count / rec_total_count))
+    print ('accuracy : %f' % (true_count / total_sample_count))
+    print ('precision : %f' % (pre_true_count / pre_total_count))
+    print ('evaluation time: %f seconds' % ((delta.seconds + delta.microseconds / 1E6) / max_steps)) 
 
